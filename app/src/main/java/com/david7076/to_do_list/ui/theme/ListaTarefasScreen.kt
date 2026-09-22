@@ -1,44 +1,22 @@
 package com.david7076.to_do_list.ui.theme
 
 import androidx.compose.foundation.clickable
-import com.david7076.to_do_list.data.Tarefa
-import com.david7076.to_do_list.viewmodel.TarefaViewModel
-
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material3.Card
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextDecoration
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-
+import com.david7076.to_do_list.data.Tarefa
+import com.david7076.to_do_list.viewmodel.TarefaViewModel
 
 @Composable
 fun ListaTarefasScreen(
@@ -52,10 +30,12 @@ fun ListaTarefasScreen(
         tarefas = tarefas,
         onNovaTarefa = onNovaTarefa,
         onEditarTarefa = onEditarTarefa,
-        onCheckedChange = { tarefa, concluida ->
-            viewModel.atualizar(tarefa.copy(concluida = concluida))
+        onAlternarConcluida = { tarefa ->
+            viewModel.atualizar(tarefa.copy(concluida = !tarefa.concluida))
         },
-        onDeletar = { tarefa -> viewModel.deletar(tarefa) }
+        onExcluirTarefa = { tarefa ->
+            viewModel.deletar(tarefa)
+        }
     )
 }
 
@@ -65,24 +45,29 @@ fun ListaTarefasContent(
     tarefas: List<Tarefa>,
     onNovaTarefa: () -> Unit,
     onEditarTarefa: (Int) -> Unit,
-    onCheckedChange: (Tarefa, Boolean) -> Unit,
-    onDeletar: (Tarefa) -> Unit
+    onAlternarConcluida: (Tarefa) -> Unit,
+    onExcluirTarefa: (Tarefa) -> Unit,
+    modifier: Modifier = Modifier,
+    tarefaInicialEmExclusao: Tarefa? = null
 ) {
+    var tarefaParaExcluir by remember { mutableStateOf<Tarefa?>(tarefaInicialEmExclusao) }
+
     Scaffold(
+        modifier = modifier,
         topBar = {
             TopAppBar(title = { Text("Minhas Tarefas") })
         },
         floatingActionButton = {
             FloatingActionButton(onClick = onNovaTarefa) {
-                Icon(Icons.Default.Add, contentDescription = "Nova tarefa")
+                Icon(Icons.Default.Add, contentDescription = "Adicionar Tarefa")
             }
         }
-    ) { padding ->
+    ) { innerPadding ->
         if (tarefas.isEmpty()) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(padding),
+                    .padding(innerPadding),
                 contentAlignment = Alignment.Center
             ) {
                 Text("Nenhuma tarefa cadastrada.")
@@ -91,111 +76,116 @@ fun ListaTarefasContent(
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(padding),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                    .padding(innerPadding)
             ) {
                 items(tarefas, key = { it.id }) { tarefa ->
-                    TarefaItem(
+                    ItemTarefa(
                         tarefa = tarefa,
-                        onCheckedChange = { concluida -> onCheckedChange(tarefa, concluida) },
-                        onEditar = { onEditarTarefa(tarefa.id) },
-                        onDeletar = { onDeletar(tarefa) }
+                        onClick = { onEditarTarefa(tarefa.id) },
+                        onCheckChange = { onAlternarConcluida(tarefa) },
+                        onDeleteClick = { tarefaParaExcluir = tarefa }
                     )
+                    HorizontalDivider()
                 }
             }
+        }
+
+        // Diálogo de confirmação Material 3
+        tarefaParaExcluir?.let { tarefa ->
+            AlertDialog(
+                onDismissRequest = { tarefaParaExcluir = null },
+                title = { Text(text = "Excluir tarefa") },
+                text = {
+                    Text(
+                        text = "Deseja realmente excluir a tarefa \"${tarefa.titulo}\"? Esta ação não pode ser desfeita."
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            onExcluirTarefa(tarefa)
+                            tarefaParaExcluir = null
+                        }
+                    ) {
+                        Text("Excluir", color = MaterialTheme.colorScheme.error)
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = { tarefaParaExcluir = null }
+                    ) {
+                        Text("Cancelar")
+                    }
+                }
+            )
         }
     }
 }
 
 @Composable
-private fun TarefaItem(
+fun ItemTarefa(
     tarefa: Tarefa,
-    onCheckedChange: (Boolean) -> Unit,
-    onEditar: () -> Unit,
-    onDeletar: () -> Unit
+    onClick: () -> Unit,
+    onCheckChange: (Boolean) -> Unit,
+    onDeleteClick: () -> Unit
 ) {
-    Card(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onEditar)
+            .clickable(onClick = onClick)
+            .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Checkbox(
-                checked = tarefa.concluida,
-                onCheckedChange = onCheckedChange
+        Checkbox(
+            checked = tarefa.concluida,
+            onCheckedChange = onCheckChange
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = tarefa.titulo,
+                style = MaterialTheme.typography.titleMedium,
+                textDecoration = if (tarefa.concluida) TextDecoration.LineThrough else null
             )
-            Spacer(modifier = Modifier.width(8.dp))
-            Column(modifier = Modifier.weight(1f)) {
+            if (tarefa.descricao.isNotBlank()) {
                 Text(
-                    text = tarefa.titulo,
-                    style = MaterialTheme.typography.titleMedium,
-                    textDecoration = if (tarefa.concluida) TextDecoration.LineThrough else TextDecoration.None
+                    text = tarefa.descricao,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                if (tarefa.descricao.isNotBlank()) {
-                    Text(
-                        text = tarefa.descricao,
-                        style = MaterialTheme.typography.bodySmall,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
             }
-            IconButton(onClick = onDeletar) {
-                Icon(Icons.Default.Delete, contentDescription = "Deletar tarefa")
-            }
+        }
+        IconButton(onClick = onDeleteClick) {
+            Icon(Icons.Default.Delete, contentDescription = "Excluir Tarefa")
         }
     }
 }
 
-@Preview(showBackground = true, name = "Lista com tarefas")
+@Preview(showBackground = true)
 @Composable
-private fun ListaTarefasContentPreview() {
+fun ListaTarefasPreview() {
     ListaTarefasContent(
         tarefas = listOf(
-            Tarefa(id = 1, titulo = "Estudar Room", descricao = "Revisar anotações e DAO", concluida = false),
-            Tarefa(id = 2, titulo = "Enviar atividade", descricao = "Upload no portal da FIAP", concluida = true)
+            Tarefa(1, "Estudar Kotlin", "Revisar Jetpack Compose", false),
+            Tarefa(2, "Comprar café", "", true)
         ),
         onNovaTarefa = {},
         onEditarTarefa = {},
-        onCheckedChange = { _, _ -> },
-        onDeletar = {}
+        onAlternarConcluida = {},
+        onExcluirTarefa = {}
     )
 }
 
-@Preview(showBackground = true, name = "Lista vazia")
+@Preview(showBackground = true)
 @Composable
-private fun ListaTarefasContentVaziaPreview() {
+fun ConfirmacaoExclusaoDialogPreview() {
+    val tarefaExemplo = Tarefa(1, "Apresentar trabalho de Android", "Preparar slides para a banca", false)
     ListaTarefasContent(
-        tarefas = emptyList(),
+        tarefas = listOf(tarefaExemplo),
         onNovaTarefa = {},
         onEditarTarefa = {},
-        onCheckedChange = { _, _ -> },
-        onDeletar = {}
-    )
-}
-
-@Preview(showBackground = true, name = "Item pendente")
-@Composable
-private fun TarefaItemPreview() {
-    TarefaItem(
-        tarefa = Tarefa(id = 1, titulo = "Estudar Room", descricao = "Revisar anotações e DAO", concluida = false),
-        onCheckedChange = {},
-        onEditar = {},
-        onDeletar = {}
-    )
-}
-
-@Preview(showBackground = true, name = "Item concluído")
-@Composable
-private fun TarefaItemConcluidaPreview() {
-    TarefaItem(
-        tarefa = Tarefa(id = 2, titulo = "Enviar atividade", descricao = "Upload no portal da FIAP", concluida = true),
-        onCheckedChange = {},
-        onEditar = {},
-        onDeletar = {}
+        onAlternarConcluida = {},
+        onExcluirTarefa = {},
+        tarefaInicialEmExclusao = tarefaExemplo
     )
 }
